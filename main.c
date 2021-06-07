@@ -2,31 +2,44 @@
 #include <stdio.h>
 
 #define PLAYER_HOR_SPD 200
-#define SCREEN_WIDTH 600
-#define SCREEN_HEIGHT 600
+#define SCREEN_WIDTH 650
+#define SCREEN_HEIGHT 650
+#define PLAYER_WIDTH 44
+#define PLAYER_HEIGHT 20
+#define ENEMY_WIDTH 44
+#define ENEMY_HEIGHT 32
 
-typedef struct {
-    Vector2 position;
-    Vector2 size;
-} Character;
-
-Character player = { { SCREEN_WIDTH / 2 - 10, 450 }, { 20, 20 } };
-Character enemies[5][10];
+Vector2 player = { SCREEN_WIDTH / 2 - 22, SCREEN_HEIGHT - 50 };
+Vector2 enemies[5][10];
 Vector2 bullets[100];
+char scoreText[20] = "SCORE: 0";
+int score = 0;
 
-void updatePlayer(float);
-void updateBullets(float);
+void updatePlayer(Sound*, float);
+void updateBullets(Sound*, float);
 
 int main() {
 
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Space Invaders");
-    //SetTargetFPS(60);
+    SetTargetFPS(60);
 
-    int enemiesMargin = (SCREEN_WIDTH - SCREEN_WIDTH * 9 / 10 - 20) / 2;
+    Texture2D playerTexture = LoadTexture("assets/sprites/player.png");
+    Texture2D enemyTexture = LoadTexture("assets/sprites/enemy.png");
+
+    InitAudioDevice();
+
+    Sound playerShootFx = LoadSound("assets/sounds/player_shoot.wav");
+    Sound enemyExplosionFx = LoadSound("assets/sounds/enemy_explosion.wav");
+    Sound scoreFx = LoadSound("assets/sounds/score.wav");
+
+    SetSoundVolume(playerShootFx, 0.2);
+    SetSoundVolume(enemyExplosionFx, 0.1);
+
+    int enemiesMargin = (SCREEN_WIDTH - SCREEN_WIDTH * 9 / 10 - 44) / 2;
 
     for (int i = 0; i < 5; ++i) {
         for (int j = 0; j < 10; ++j) {
-            enemies[i][j] = (Character) { { j * SCREEN_WIDTH / 10 + enemiesMargin, i * 30 + enemiesMargin }, { 20, 20 } };
+            enemies[i][j] = (Vector2) { j * SCREEN_WIDTH / 10 + enemiesMargin, i * 50 + enemiesMargin };
         }
     }
 
@@ -36,71 +49,85 @@ int main() {
 
     while (!WindowShouldClose()) {
 
-        updatePlayer(GetFrameTime());
-        updateBullets(GetFrameTime());
+        updatePlayer(&playerShootFx, GetFrameTime());
+        updateBullets(&enemyExplosionFx, GetFrameTime());
 
         BeginDrawing();
 
         ClearBackground(BLACK);
-        DrawRectangleV(player.position, player.size, RED);
+        DrawTextureV(playerTexture, player, WHITE);
 
         for (int i = 0; i < 5; ++i) {
             for (int j = 0; j < 10; ++j) {
-                DrawRectangleV(enemies[i][j].position, enemies[i][j].size, BLUE);
+                if (enemies[i][j].x != -1 && enemies[i][j].y != -1) {
+                    DrawTextureV(enemyTexture, enemies[i][j], WHITE);
+                }
             }
         }
 
         for (int i = 0; i < 100; ++i) {
             if (bullets[i].x != -1 && bullets[i].y != -1) {
-                DrawRectangle(bullets[i].x, bullets[i].y, 5, 5, WHITE);
+                DrawRectangle(bullets[i].x, bullets[i].y, 6, 6, WHITE);
             }
         }
 
-        DrawFPS(10, SCREEN_HEIGHT - 42);
+        sprintf(scoreText, "SCORE: %d", score * 100);
+        DrawText(scoreText, 10, SCREEN_HEIGHT - 25, 20, RAYWHITE);
 
         EndDrawing();
 
     }
 
+    UnloadTexture(playerTexture);
+    UnloadTexture(enemyTexture);
+
+    UnloadSound(playerShootFx);
+    UnloadSound(enemyExplosionFx);
+    UnloadSound(scoreFx);
+
+    CloseAudioDevice();
+
     CloseWindow();
+
     return 0;
 }
 
-void updatePlayer(float delta) {
+void updatePlayer(Sound* fx, float delta) {
     if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) {
-        player.position.x -= PLAYER_HOR_SPD * delta;
+        player.x -= PLAYER_HOR_SPD * delta;
     } else if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) {
-        player.position.x += PLAYER_HOR_SPD * delta;
+        player.x += PLAYER_HOR_SPD * delta;
     }
 
     if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_W)|| IsKeyPressed(KEY_UP)) {
         for (int i = 0; i < 100; i++) {
             if (bullets[i].x == -1 && bullets[i].y == -1) {
-                bullets[i] = (Vector2) { player.position.x + 10 - 2.5, player.position.y - 10 };
+                PlaySound(*fx);
+                bullets[i] = (Vector2) { player.x + 22 - 2, player.y - 2 };
                 break;
             }
         }
     }
 
-    if (player.position.x + player.size.x > SCREEN_WIDTH) {
-        player.position.x = SCREEN_WIDTH - player.size.x;
-    } else if (player.position.x < 0) {
-        player.position.x = 0;
+    if (player.x + PLAYER_WIDTH > SCREEN_WIDTH) {
+        player.x = SCREEN_WIDTH - PLAYER_WIDTH;
+    } else if (player.x < 0) {
+        player.x = 0;
     }
 }
 
-void updateBullets(float delta) {
+void updateBullets(Sound* fx, float delta) {
     for (int i = 0; i < 100; ++i) {
         if (bullets[i].x != -1 && bullets[i].y != -1) {
             for (int col = 0; col < 5; ++col) {
                 for (int row = 0; row < 10; ++row) {
-                    if (
-                        bullets[i].y <= enemies[col][row].position.y + enemies[col][row].size.y &&
-                        bullets[i].x >= enemies[col][row].position.x &&
-                        bullets[i].x <= enemies[col][row].position.x + enemies[col][row].size.x
-                    ) {
-                        enemies[col][row] = (Character) { { -1, -1 }, { 0, 0 } };
-                        bullets[i] = (Vector2) { -1, -1 };
+                    if (enemies[col][row].x != -1 && enemies[col][row].y != 1) {
+                        if (CheckCollisionRecs((Rectangle) { bullets[i].x, bullets[i].y, 6, 6 }, (Rectangle) { enemies[col][row].x, enemies[col][row].y, PLAYER_WIDTH, PLAYER_HEIGHT })) {
+                            PlaySound(*fx);
+                            enemies[col][row] = (Vector2) { -1, -1 };
+                            bullets[i] = (Vector2) { -1, -1 };
+                            score++;
+                        }
                     }
                 }
             }
