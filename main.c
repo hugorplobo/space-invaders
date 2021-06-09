@@ -8,6 +8,11 @@
 #define ENEMY_WIDTH 44
 #define ENEMY_HEIGHT 32
 
+typedef struct {
+    char name[4];
+    int value;
+} Score;
+
 Vector2 player = { SCREEN_WIDTH / 2 - 22, SCREEN_HEIGHT - 50 };
 Vector2 enemies[5][8];
 Vector2 bullets[50];
@@ -17,16 +22,26 @@ int marginL = 10, marginR = 600;
 int direction = 1;
 int enemyCount = 40;
 int playerHP = 3;
+int framesCounter = 0;
+int playerCanShoot = 1;
+int isInGame = 0;
+int isInScores = 0;
+int menuTextSelected = 0;
 
 void updatePlayer(Sound*, float);
 void updateBullets(Sound*, Sound*, float);
 void updateEnemies(float);
 void updateEnemiesBullets(Sound*, float);
+void initGame();
+void drawGame(Texture2D*, Texture2D*);
+void drawMainMenu();
+void handleMainMenu();
 
 int main() {
 
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Space Invaders");
     SetTargetFPS(60);
+    HideCursor();
 
     Texture2D playerTexture = LoadTexture("assets/sprites/player.png");
     Texture2D enemyTexture = LoadTexture("assets/sprites/enemy.png");
@@ -40,61 +55,33 @@ int main() {
     SetSoundVolume(playerShootFx, 0.2);
     SetSoundVolume(enemyExplosionFx, 0.1);
 
-    for (int i = 0; i < 5; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            enemies[i][j] = (Vector2) { j * 80 + 20, i * 50 + 50 };
-        }
-    }
-
-    for (int i = 0; i < 50; ++i) {
-        bullets[i] = (Vector2) { -1, -1 };
-    }
-
-    for (int i = 0; i < 50; ++i) {
-        enemiesBullets[i] = (Vector2) { -1, -1 };
-    }
-
+    initGame();
 
     while (!WindowShouldClose()) {
 
-        if (playerHP > 0 && enemyCount > 0) {
+        if (playerHP > 0 && enemyCount > 0 && isInGame) {
+            if (!playerCanShoot) framesCounter++;
+
+            if (framesCounter == 60) {
+                framesCounter = 0;
+                playerCanShoot = 1;
+            }
+
             updatePlayer(&playerShootFx, GetFrameTime());
             updateBullets(&enemyExplosionFx, &scoreFx, GetFrameTime());
             updateEnemies(GetFrameTime());
             updateEnemiesBullets(&enemyExplosionFx, GetFrameTime());
+        } else if (!isInGame) {
+            handleMainMenu();
         }
 
         BeginDrawing();
-
         ClearBackground(BLACK);
 
-        if (playerHP > 0 && enemyCount > 0) {
-            DrawTextureV(playerTexture, player, WHITE);
-
-            for (int i = 0; i < 5; ++i) {
-                for (int j = 0; j < 8; ++j) {
-                    if (enemies[i][j].x != -1) {
-                        DrawTextureV(enemyTexture, enemies[i][j], WHITE);
-                    }
-                }
-            }
-
-            for (int i = 0; i < 50; ++i) {
-                if (bullets[i].x != -1) {
-                    DrawRectangle(bullets[i].x, bullets[i].y, 6, 6, WHITE);
-                }
-            }
-
-            for (int i = 0; i < 50; ++i) {
-                if (enemiesBullets[i].x != -1) {
-                    DrawRectangle(enemiesBullets[i].x, enemiesBullets[i].y, 6, 6, WHITE);
-                }
-            }
-            DrawText(TextFormat("SCORE: %05i", score * 100), 10, SCREEN_HEIGHT - 25, 20, RAYWHITE);
-        } else if (playerHP <= 0) {
-            DrawText("Game Over", SCREEN_WIDTH / 2 - MeasureText("Game Over", 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
+        if (isInGame) {
+            drawGame(&playerTexture, &enemyTexture);
         } else {
-            DrawText("You Won", SCREEN_WIDTH / 2 - MeasureText("You Won", 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
+            drawMainMenu();
         }
 
         EndDrawing();
@@ -123,11 +110,15 @@ void updatePlayer(Sound* fx, float delta) {
     }
 
     if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_W)|| IsKeyPressed(KEY_UP)) {
-        for (int i = 0; i < 100; i++) {
-            if (bullets[i].x == -1 && bullets[i].y == -1) {
-                PlaySound(*fx);
-                bullets[i] = (Vector2) { player.x + 22 - 2, player.y - 2 };
-                break;
+
+        if (playerCanShoot) {
+            playerCanShoot = 0;
+            for (int i = 0; i < 100; i++) {
+                if (bullets[i].x == -1 && bullets[i].y == -1) {
+                    PlaySound(*fx);
+                    bullets[i] = (Vector2) { player.x + 22 - 2, player.y - 2 };
+                    break;
+                }
             }
         }
     }
@@ -241,5 +232,85 @@ void updateEnemiesBullets(Sound* fx, float delta) {
                 bullet->y += 400 * delta;
             }
         } 
+    }
+}
+
+void drawGame(Texture2D* playerTexture, Texture2D* enemyTexture) {
+    if (playerHP > 0 && enemyCount > 0) {
+        DrawTextureV(*playerTexture, player, WHITE);
+
+        for (int i = 0; i < 5; ++i) {
+            for (int j = 0; j < 8; ++j) {
+                if (enemies[i][j].x != -1) {
+                    DrawTextureV(*enemyTexture, enemies[i][j], WHITE);
+                }
+            }
+        }
+
+        for (int i = 0; i < 50; ++i) {
+            if (bullets[i].x != -1) {
+                DrawRectangle(bullets[i].x, bullets[i].y, 6, 6, WHITE);
+            }
+        }
+
+        for (int i = 0; i < 50; ++i) {
+            if (enemiesBullets[i].x != -1) {
+                DrawRectangle(enemiesBullets[i].x, enemiesBullets[i].y, 6, 6, WHITE);
+            }
+        }
+        DrawText(TextFormat("SCORE: %05i", score * 100), 10, SCREEN_HEIGHT - 25, 20, RAYWHITE);
+    } else if (playerHP <= 0) {
+        DrawText("Game Over", SCREEN_WIDTH / 2 - MeasureText("Game Over", 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
+    } else {
+        DrawText("You Won", SCREEN_WIDTH / 2 - MeasureText("You Won", 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
+    }
+}
+
+void drawMainMenu() {
+
+    if (!isInScores) {
+        DrawText("Space Invaders", SCREEN_WIDTH / 2 - MeasureText("Space Invaders", 70) / 2, 30, 70, WHITE);
+
+        if (menuTextSelected == 0) {
+            DrawText("- Play -", SCREEN_WIDTH / 2 - MeasureText("- Play -", 55) / 2, 300, 55, WHITE);
+            DrawText("Scores", SCREEN_WIDTH / 2 - MeasureText("Scores", 50) / 2, 400, 50, WHITE);
+        } else {
+            DrawText("Play", SCREEN_WIDTH / 2 - MeasureText("Play", 50) / 2, 300, 50, WHITE);
+            DrawText("- Scores -", SCREEN_WIDTH / 2 - MeasureText("- Scores -", 55) / 2, 400, 55, WHITE);   
+        }
+    } else {
+        return;
+    }
+}
+
+void handleMainMenu() {
+    if (IsKeyPressed(KEY_DOWN)) {
+        menuTextSelected = 1;
+    } else if (IsKeyPressed(KEY_UP)) {
+        menuTextSelected = 0;
+    }
+
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+        if (menuTextSelected == 0) {
+            isInGame = 1;
+        } else {
+            isInScores = 1;
+        }
+    }
+}
+
+void initGame() {
+    for (int i = 0; i < 5; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            enemies[i][j] = (Vector2) { j * 80 + 20, i * 50 + 50 };
+        }
+    }
+
+    for (int i = 0; i < 50; ++i) {
+        bullets[i] = (Vector2) { -1, -1 };
+    }
+
+    for (int i = 0; i < 50; ++i) {
+        enemiesBullets[i] = (Vector2) { -1, -1 };
     }
 }
