@@ -17,6 +17,8 @@ int marginL = 10, marginR = 600;
 int direction = 1;
 int enemyCount = 40;
 int playerHP = 3;
+int framesCounter = 0;
+int playerCanShoot = 1;
 
 void updatePlayer(Sound*, float);
 void updateBullets(Sound*, Sound*, float);
@@ -58,6 +60,11 @@ int main() {
     while (!WindowShouldClose()) {
 
         if (playerHP > 0 && enemyCount > 0) {
+            if (!playerCanShoot) framesCounter++;
+            if (framesCounter == 60) {
+                framesCounter = 0;
+                playerCanShoot = 1;
+            }
             updatePlayer(&playerShootFx, GetFrameTime());
             updateBullets(&enemyExplosionFx, &scoreFx, GetFrameTime());
             updateEnemies(GetFrameTime());
@@ -123,11 +130,15 @@ void updatePlayer(Sound* fx, float delta) {
     }
 
     if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_W)|| IsKeyPressed(KEY_UP)) {
-        for (int i = 0; i < 100; i++) {
-            if (bullets[i].x == -1 && bullets[i].y == -1) {
-                PlaySound(*fx);
-                bullets[i] = (Vector2) { player.x + 22 - 2, player.y - 2 };
-                break;
+
+        if (playerCanShoot) {
+            playerCanShoot = 0;
+            for (int i = 0; i < 100; i++) {
+                if (bullets[i].x == -1 && bullets[i].y == -1) {
+                    PlaySound(*fx);
+                    bullets[i] = (Vector2) { player.x + 22 - 2, player.y - 2 };
+                    break;
+                }
             }
         }
     }
