@@ -1,5 +1,4 @@
 #include "include/raylib.h"
-#include <stdio.h>
 
 #define PLAYER_HOR_SPD 200
 #define SCREEN_WIDTH 650
@@ -10,13 +9,19 @@
 #define ENEMY_HEIGHT 32
 
 Vector2 player = { SCREEN_WIDTH / 2 - 22, SCREEN_HEIGHT - 50 };
-Vector2 enemies[5][10];
-Vector2 bullets[100];
-char scoreText[20] = "SCORE: 0";
+Vector2 enemies[5][8];
+Vector2 bullets[50];
+Vector2 enemiesBullets[50];
 int score = 0;
+int marginL = 10, marginR = 600;
+int direction = 1;
+int enemyCount = 40;
+int playerHP = 3;
 
 void updatePlayer(Sound*, float);
-void updateBullets(Sound*, float);
+void updateBullets(Sound*, Sound*, float);
+void updateEnemies(float);
+void updateEnemiesBullets(Sound*, float);
 
 int main() {
 
@@ -35,44 +40,62 @@ int main() {
     SetSoundVolume(playerShootFx, 0.2);
     SetSoundVolume(enemyExplosionFx, 0.1);
 
-    int enemiesMargin = (SCREEN_WIDTH - SCREEN_WIDTH * 9 / 10 - 44) / 2;
-
     for (int i = 0; i < 5; ++i) {
-        for (int j = 0; j < 10; ++j) {
-            enemies[i][j] = (Vector2) { j * SCREEN_WIDTH / 10 + enemiesMargin, i * 50 + enemiesMargin };
+        for (int j = 0; j < 8; ++j) {
+            enemies[i][j] = (Vector2) { j * 80 + 20, i * 50 + 50 };
         }
     }
 
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 50; ++i) {
         bullets[i] = (Vector2) { -1, -1 };
     }
 
+    for (int i = 0; i < 50; ++i) {
+        enemiesBullets[i] = (Vector2) { -1, -1 };
+    }
+
+
     while (!WindowShouldClose()) {
 
-        updatePlayer(&playerShootFx, GetFrameTime());
-        updateBullets(&enemyExplosionFx, GetFrameTime());
+        if (playerHP > 0 && enemyCount > 0) {
+            updatePlayer(&playerShootFx, GetFrameTime());
+            updateBullets(&enemyExplosionFx, &scoreFx, GetFrameTime());
+            updateEnemies(GetFrameTime());
+            updateEnemiesBullets(&enemyExplosionFx, GetFrameTime());
+        }
 
         BeginDrawing();
 
         ClearBackground(BLACK);
-        DrawTextureV(playerTexture, player, WHITE);
 
-        for (int i = 0; i < 5; ++i) {
-            for (int j = 0; j < 10; ++j) {
-                if (enemies[i][j].x != -1 && enemies[i][j].y != -1) {
-                    DrawTextureV(enemyTexture, enemies[i][j], WHITE);
+        if (playerHP > 0 && enemyCount > 0) {
+            DrawTextureV(playerTexture, player, WHITE);
+
+            for (int i = 0; i < 5; ++i) {
+                for (int j = 0; j < 8; ++j) {
+                    if (enemies[i][j].x != -1) {
+                        DrawTextureV(enemyTexture, enemies[i][j], WHITE);
+                    }
                 }
             }
-        }
 
-        for (int i = 0; i < 100; ++i) {
-            if (bullets[i].x != -1 && bullets[i].y != -1) {
-                DrawRectangle(bullets[i].x, bullets[i].y, 6, 6, WHITE);
+            for (int i = 0; i < 50; ++i) {
+                if (bullets[i].x != -1) {
+                    DrawRectangle(bullets[i].x, bullets[i].y, 6, 6, WHITE);
+                }
             }
-        }
 
-        sprintf(scoreText, "SCORE: %d", score * 100);
-        DrawText(scoreText, 10, SCREEN_HEIGHT - 25, 20, RAYWHITE);
+            for (int i = 0; i < 50; ++i) {
+                if (enemiesBullets[i].x != -1) {
+                    DrawRectangle(enemiesBullets[i].x, enemiesBullets[i].y, 6, 6, WHITE);
+                }
+            }
+            DrawText(TextFormat("SCORE: %05i", score * 100), 10, SCREEN_HEIGHT - 25, 20, RAYWHITE);
+        } else if (playerHP <= 0) {
+            DrawText("Game Over", SCREEN_WIDTH / 2 - MeasureText("Game Over", 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
+        } else {
+            DrawText("You Won", SCREEN_WIDTH / 2 - MeasureText("You Won", 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
+        }
 
         EndDrawing();
 
@@ -116,17 +139,19 @@ void updatePlayer(Sound* fx, float delta) {
     }
 }
 
-void updateBullets(Sound* fx, float delta) {
-    for (int i = 0; i < 100; ++i) {
-        if (bullets[i].x != -1 && bullets[i].y != -1) {
+void updateBullets(Sound* explosionFx, Sound* scoreFx, float delta) {
+    for (int i = 0; i < 50; ++i) {
+        if (bullets[i].x != -1) {
             for (int col = 0; col < 5; ++col) {
-                for (int row = 0; row < 10; ++row) {
+                for (int row = 0; row < 8; ++row) {
                     if (enemies[col][row].x != -1 && enemies[col][row].y != 1) {
-                        if (CheckCollisionRecs((Rectangle) { bullets[i].x, bullets[i].y, 6, 6 }, (Rectangle) { enemies[col][row].x, enemies[col][row].y, PLAYER_WIDTH, PLAYER_HEIGHT })) {
-                            PlaySound(*fx);
+                        if (CheckCollisionRecs((Rectangle) { bullets[i].x, bullets[i].y, 6, 6 }, (Rectangle) { enemies[col][row].x, enemies[col][row].y, ENEMY_WIDTH, ENEMY_HEIGHT })) {
+                            PlaySound(*explosionFx);
                             enemies[col][row] = (Vector2) { -1, -1 };
                             bullets[i] = (Vector2) { -1, -1 };
+                            enemyCount--;
                             score++;
+                            if (score % 10 == 0) PlaySound(*scoreFx);
                         }
                     }
                 }
@@ -136,10 +161,85 @@ void updateBullets(Sound* fx, float delta) {
                 bullets[i] = (Vector2) { -1, -1 };
             }
 
-            if (bullets[i].x != -1 && bullets[i].y != -1) {
+            if (bullets[i].x != -1) {
                 bullets[i].y -= 400 * delta;
             }
 
         }
+    }
+}
+
+void updateEnemies(float delta) {
+    Vector2 aux = { 0, 0 };
+    Vector2* first = &aux;
+    Vector2* last = &enemies[0][0];
+
+    for (int i = 0; i < 5; ++i) {
+        for (int j = 0; j < 8; ++j){
+            if (enemies[i][j].x != -1) first = &enemies[i][j];
+        }
+    }
+
+    for (int i = 0; i < 5; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            Vector2* enemy = &enemies[i][j];
+            if (enemy->x == -1) continue;
+
+            if (enemy->x < first->x) first = enemy;
+            else if (enemy->x > last->x) last = enemy;
+        }
+    }
+
+    if (first->x <= marginL) direction = 1;
+    else if (last->x >= marginR) direction = -1;
+
+    for (int i = 0; i < 5; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            Vector2* enemy = &enemies[i][j];
+            if (enemy->x == -1) continue;
+
+            enemy->x += direction * 20 * (40 / enemyCount) * delta;
+
+            if (i == 4) {
+                if (GetRandomValue(1, 500) == 1) {
+                    for (int k = 0; k < 50; ++k) {
+                        if (enemiesBullets[k].x == -1 && enemiesBullets[k].y == -1) {
+                            enemiesBullets[k] = (Vector2) { enemy->x + 22 - 2, enemy->y + 2};
+                            break;
+                        }
+                    }
+                }
+            } else if (enemies[i + 1][j].x == -1) {
+                if (GetRandomValue(1, 500) == 1) {
+                    for (int k = 0; k < 50; ++k) {
+                        if (enemiesBullets[k].x == -1 && enemiesBullets[k].y == -1) {
+                            enemiesBullets[k] = (Vector2) { enemy->x + 22 - 2, enemy->y + 2};
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void updateEnemiesBullets(Sound* fx, float delta) {
+    for (int i = 0; i < 50; ++i) {
+        if (enemiesBullets[i].x != -1 && enemiesBullets[i].y != -1) {
+            Vector2* bullet = &enemiesBullets[i];
+            if (CheckCollisionRecs((Rectangle) { enemiesBullets[i].x, enemiesBullets[i].y, 6, 6 }, (Rectangle) { player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT })) {
+                PlaySound(*fx);
+                playerHP -= 1;
+                enemiesBullets[i] = (Vector2) { -1, -1 };
+            }
+
+            if (bullet->y > SCREEN_HEIGHT) {
+                *bullet = (Vector2) { -1, -1 };
+            }
+
+            if (bullet->x != -1) {
+                bullet->y += 400 * delta;
+            }
+        } 
     }
 }
