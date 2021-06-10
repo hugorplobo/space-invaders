@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include "include/raylib.h"
 
 #define PLAYER_HOR_SPD 200
@@ -27,6 +30,10 @@ int playerCanShoot = 1;
 int isInGame = 0;
 int isInScores = 0;
 int menuTextSelected = 0;
+int isTypingScore = 0;
+int nameCount = 0;
+char nameScore[4];
+Score scores[5] = { 0 };
 
 void updatePlayer(Sound*, float);
 void updateBullets(Sound*, Sound*, float);
@@ -36,6 +43,8 @@ void initGame();
 void drawGame(Texture2D*, Texture2D*);
 void drawMainMenu();
 void handleMainMenu();
+void readScores();
+void handleEndGame();
 
 int main() {
 
@@ -55,6 +64,7 @@ int main() {
     SetSoundVolume(playerShootFx, 0.2);
     SetSoundVolume(enemyExplosionFx, 0.1);
 
+    readScores();
     initGame();
 
     while (!WindowShouldClose()) {
@@ -71,7 +81,7 @@ int main() {
             updateBullets(&enemyExplosionFx, &scoreFx, GetFrameTime());
             updateEnemies(GetFrameTime());
             updateEnemiesBullets(&enemyExplosionFx, GetFrameTime());
-        } else if (!isInGame) {
+        } else if (!isInGame && !isTypingScore) {
             handleMainMenu();
         }
 
@@ -80,8 +90,10 @@ int main() {
 
         if (isInGame) {
             drawGame(&playerTexture, &enemyTexture);
-        } else {
+        } else if (!isTypingScore) {
             drawMainMenu();
+        } else {
+            handleEndGame();
         }
 
         EndDrawing();
@@ -100,6 +112,93 @@ int main() {
     CloseWindow();
 
     return 0;
+}
+
+void saveScore() {
+    char scoresText[50];
+
+    for (int i = 0; i < 5; ++i) {
+        strcat(scoresText, TextFormat("%s%05i\n", scores[i].name, scores[i].value));
+    }
+
+    FILE* scoreFile = fopen("scores", "w");
+
+    if (scoreFile == NULL) return;
+
+    fputs(scoresText, scoreFile);
+    fclose(scoreFile);
+}
+
+void handleTypingScore() {
+    int key = GetCharPressed();
+
+    if (key >= 32 && key <= 125 && nameCount < 3) {
+        nameScore[nameCount] = (char) key;
+        nameCount++;
+    }
+
+    if (IsKeyPressed(KEY_BACKSPACE)) {
+        nameCount--;
+        if (nameCount < 0) nameCount = 0;
+        nameScore[nameCount] = '\0';
+    }
+
+    if (IsKeyPressed(KEY_ENTER) && nameCount == 3) {
+
+        int pos = -1;
+        for (int i = 0; i < 5; ++i) {
+            if (score > scores[i].value) {
+                if (pos == -1) pos = i;
+                else if (scores[i].value > scores[pos].value) pos = i; 
+            }
+        }
+
+        if (pos != -1) {
+            Score temp[5] = { scores[0], scores[1], scores[2], scores[3], scores[4] };
+            temp[pos].value = score;
+            strcpy(temp[pos].name, nameScore);
+
+            for (int i = pos + 1; i < 5; ++i) {
+                temp[i] = scores[i - 1];
+            }
+
+            for (int i = 0; i < 5; ++i) {
+                scores[i] = temp[i];
+            }
+        }
+
+        saveScore();
+        score = 0;
+        playerHP = 3;
+        enemyCount = 40;
+        isTypingScore = 0;
+        nameCount = 0;
+
+        for (int i = 0; i < 3; ++i) {
+            nameScore[i] = '\0';
+        }
+
+        initGame();
+    }
+}
+
+void sortScores() {
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4 - i; ++j) {
+            if (scores[j].value < scores[j + 1].value) {
+                Score temp = scores[j];
+                scores[j] = scores[j + 1];
+                scores[j + 1] = temp;
+            }
+        }
+    }
+}
+
+void handleEndGame() {
+    DrawText("Type your name", SCREEN_WIDTH / 2 - MeasureText("Type your name", 50) / 2, SCREEN_HEIGHT / 2 - 150, 50, RAYWHITE);
+    DrawText(nameScore, SCREEN_WIDTH / 2 - MeasureText(nameScore, 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
+
+    handleTypingScore();
 }
 
 void updatePlayer(Sound* fx, float delta) {
@@ -141,8 +240,8 @@ void updateBullets(Sound* explosionFx, Sound* scoreFx, float delta) {
                             enemies[col][row] = (Vector2) { -1, -1 };
                             bullets[i] = (Vector2) { -1, -1 };
                             enemyCount--;
-                            score++;
-                            if (score % 10 == 0) PlaySound(*scoreFx);
+                            score += 100;
+                            if (score % 1000 == 0) PlaySound(*scoreFx);
                         }
                     }
                 }
@@ -192,7 +291,7 @@ void updateEnemies(float delta) {
             enemy->x += direction * 20 * (40 / enemyCount) * delta;
 
             if (i == 4) {
-                if (GetRandomValue(1, 500) == 1) {
+                if (GetRandomValue(1, 200) == 1) {
                     for (int k = 0; k < 50; ++k) {
                         if (enemiesBullets[k].x == -1 && enemiesBullets[k].y == -1) {
                             enemiesBullets[k] = (Vector2) { enemy->x + 22 - 2, enemy->y + 2};
@@ -258,11 +357,10 @@ void drawGame(Texture2D* playerTexture, Texture2D* enemyTexture) {
                 DrawRectangle(enemiesBullets[i].x, enemiesBullets[i].y, 6, 6, WHITE);
             }
         }
-        DrawText(TextFormat("SCORE: %05i", score * 100), 10, SCREEN_HEIGHT - 25, 20, RAYWHITE);
-    } else if (playerHP <= 0) {
-        DrawText("Game Over", SCREEN_WIDTH / 2 - MeasureText("Game Over", 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
+        DrawText(TextFormat("SCORE: %05i", score), 10, SCREEN_HEIGHT - 25, 20, RAYWHITE);
     } else {
-        DrawText("You Won", SCREEN_WIDTH / 2 - MeasureText("You Won", 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
+        isInGame = 0;
+        isTypingScore = 1;
     }
 }
 
@@ -279,22 +377,34 @@ void drawMainMenu() {
             DrawText("- Scores -", SCREEN_WIDTH / 2 - MeasureText("- Scores -", 55) / 2, 400, 55, WHITE);   
         }
     } else {
-        return;
+        sortScores();
+        for (int i = 0; i < 5; ++i) {
+            char temp[16];
+            strcpy(temp, TextFormat("%s        %05i", scores[i].name, scores[i].value));
+            DrawText(temp, SCREEN_WIDTH / 2 - MeasureText(temp, 60) / 2, i * 100 + 50, 60, WHITE);
+        }
+        DrawText("- Back -", SCREEN_WIDTH / 2 - MeasureText("- Back -", 60) / 2, 550, 60, WHITE);
     }
 }
 
 void handleMainMenu() {
-    if (IsKeyPressed(KEY_DOWN)) {
-        menuTextSelected = 1;
-    } else if (IsKeyPressed(KEY_UP)) {
-        menuTextSelected = 0;
-    }
+    if (!isInScores) {
+        if (IsKeyPressed(KEY_DOWN)) {
+            menuTextSelected = 1;
+        } else if (IsKeyPressed(KEY_UP)) {
+            menuTextSelected = 0;
+        }
 
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-        if (menuTextSelected == 0) {
-            isInGame = 1;
-        } else {
-            isInScores = 1;
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+            if (menuTextSelected == 0) {
+                isInGame = 1;
+            } else {
+                isInScores = 1;
+            }
+        }
+    } else {
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+            isInScores = 0;
         }
     }
 }
@@ -313,4 +423,19 @@ void initGame() {
     for (int i = 0; i < 50; ++i) {
         enemiesBullets[i] = (Vector2) { -1, -1 };
     }
+}
+
+void readScores() {
+    if (!FileExists("scores")) {
+        SaveFileText("scores", "AAA00000\nBBB00000\nCCC00000\nDDD00000\nEEE00000");
+    }
+
+    char* scoresText = LoadFileText("scores");
+
+    for (int i = 0, j = 0; j < 5; i += 9, ++j) {
+        strncpy(scores[j].name, scoresText + i, 3);
+        scores[j].value = atoi(scoresText + i + 3);
+    }
+
+    sortScores();
 }
