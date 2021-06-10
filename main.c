@@ -10,6 +10,8 @@
 #define PLAYER_HEIGHT 20
 #define ENEMY_WIDTH 44
 #define ENEMY_HEIGHT 32
+#define ENEMY_ATK_WIDTH 6
+#define ENEMY_ATK_HEIGHT 14
 
 typedef struct {
     char name[4];
@@ -40,11 +42,11 @@ void updateBullets(Sound*, Sound*, float);
 void updateEnemies(float);
 void updateEnemiesBullets(Sound*, float);
 void initGame();
-void drawGame(Texture2D*, Texture2D*);
+void drawGame(Texture2D*, Texture2D*, Texture2D*, Texture2D*, Texture2D*);
 void drawMainMenu();
-void handleMainMenu();
+void handleMainMenu(Sound*);
 void readScores();
-void handleEndGame();
+void handleEndGame(Sound*);
 
 int main() {
 
@@ -53,16 +55,23 @@ int main() {
     HideCursor();
 
     Texture2D playerTexture = LoadTexture("assets/sprites/player.png");
-    Texture2D enemyTexture = LoadTexture("assets/sprites/enemy.png");
+    Texture2D enemy1Texture = LoadTexture("assets/sprites/enemy1.png");
+    Texture2D enemy2Texture = LoadTexture("assets/sprites/enemy2.png");
+    Texture2D enemy3Texture = LoadTexture("assets/sprites/enemy3.png");
+    Texture2D enemyAtk = LoadTexture("assets/sprites/enemy_atk.png");
 
     InitAudioDevice();
 
     Sound playerShootFx = LoadSound("assets/sounds/player_shoot.wav");
     Sound enemyExplosionFx = LoadSound("assets/sounds/enemy_explosion.wav");
     Sound scoreFx = LoadSound("assets/sounds/score.wav");
+    Sound playerExplosionFx = LoadSound("assets/sounds/player_explosion.wav");
+    Sound uiFx = LoadSound("assets/sounds/ui_interact.wav");
 
     SetSoundVolume(playerShootFx, 0.2);
     SetSoundVolume(enemyExplosionFx, 0.1);
+    SetSoundVolume(playerExplosionFx, 0.1);
+    SetSoundVolume(uiFx, 0.2);
 
     readScores();
     initGame();
@@ -80,20 +89,20 @@ int main() {
             updatePlayer(&playerShootFx, GetFrameTime());
             updateBullets(&enemyExplosionFx, &scoreFx, GetFrameTime());
             updateEnemies(GetFrameTime());
-            updateEnemiesBullets(&enemyExplosionFx, GetFrameTime());
+            updateEnemiesBullets(&playerExplosionFx, GetFrameTime());
         } else if (!isInGame && !isTypingScore) {
-            handleMainMenu();
+            handleMainMenu(&uiFx);
         }
 
         BeginDrawing();
         ClearBackground(BLACK);
 
         if (isInGame) {
-            drawGame(&playerTexture, &enemyTexture);
+            drawGame(&playerTexture, &enemy1Texture, &enemy2Texture, &enemy3Texture, &enemyAtk);
         } else if (!isTypingScore) {
-            drawMainMenu();
+            drawMainMenu(&uiFx);
         } else {
-            handleEndGame();
+            handleEndGame(&uiFx);
         }
 
         EndDrawing();
@@ -101,7 +110,10 @@ int main() {
     }
 
     UnloadTexture(playerTexture);
-    UnloadTexture(enemyTexture);
+    UnloadTexture(enemy1Texture);
+    UnloadTexture(enemy2Texture);
+    UnloadTexture(enemy3Texture);
+    UnloadTexture(enemyAtk);
 
     UnloadSound(playerShootFx);
     UnloadSound(enemyExplosionFx);
@@ -115,7 +127,7 @@ int main() {
 }
 
 void saveScore() {
-    char scoresText[50];
+    char scoresText[41];
 
     for (int i = 0; i < 5; ++i) {
         strcat(scoresText, TextFormat("%s%05i\n", scores[i].name, scores[i].value));
@@ -129,21 +141,25 @@ void saveScore() {
     fclose(scoreFile);
 }
 
-void handleTypingScore() {
+void handleTypingScore(Sound* uiFx) {
     int key = GetCharPressed();
 
     if (key >= 32 && key <= 125 && nameCount < 3) {
+        PlaySound(*uiFx);
         nameScore[nameCount] = (char) key;
         nameCount++;
     }
 
     if (IsKeyPressed(KEY_BACKSPACE)) {
+        PlaySound(*uiFx);
         nameCount--;
         if (nameCount < 0) nameCount = 0;
         nameScore[nameCount] = '\0';
     }
 
     if (IsKeyPressed(KEY_ENTER) && nameCount == 3) {
+
+        PlaySound(*uiFx);
 
         int pos = -1;
         for (int i = 0; i < 5; ++i) {
@@ -194,11 +210,11 @@ void sortScores() {
     }
 }
 
-void handleEndGame() {
+void handleEndGame(Sound* uiFx) {
     DrawText("Type your name", SCREEN_WIDTH / 2 - MeasureText("Type your name", 50) / 2, SCREEN_HEIGHT / 2 - 150, 50, RAYWHITE);
     DrawText(nameScore, SCREEN_WIDTH / 2 - MeasureText(nameScore, 50) / 2, SCREEN_HEIGHT / 2 - 25, 50, RAYWHITE);
 
-    handleTypingScore();
+    handleTypingScore(uiFx);
 }
 
 void updatePlayer(Sound* fx, float delta) {
@@ -291,7 +307,7 @@ void updateEnemies(float delta) {
             enemy->x += direction * 20 * (40 / enemyCount) * delta;
 
             if (i == 4) {
-                if (GetRandomValue(1, 200) == 1) {
+                if (GetRandomValue(1, 400) == 1) {
                     for (int k = 0; k < 50; ++k) {
                         if (enemiesBullets[k].x == -1 && enemiesBullets[k].y == -1) {
                             enemiesBullets[k] = (Vector2) { enemy->x + 22 - 2, enemy->y + 2};
@@ -300,7 +316,7 @@ void updateEnemies(float delta) {
                     }
                 }
             } else if (enemies[i + 1][j].x == -1) {
-                if (GetRandomValue(1, 500) == 1) {
+                if (GetRandomValue(1, 400) == 1) {
                     for (int k = 0; k < 50; ++k) {
                         if (enemiesBullets[k].x == -1 && enemiesBullets[k].y == -1) {
                             enemiesBullets[k] = (Vector2) { enemy->x + 22 - 2, enemy->y + 2};
@@ -317,7 +333,7 @@ void updateEnemiesBullets(Sound* fx, float delta) {
     for (int i = 0; i < 50; ++i) {
         if (enemiesBullets[i].x != -1 && enemiesBullets[i].y != -1) {
             Vector2* bullet = &enemiesBullets[i];
-            if (CheckCollisionRecs((Rectangle) { enemiesBullets[i].x, enemiesBullets[i].y, 6, 6 }, (Rectangle) { player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT })) {
+            if (CheckCollisionRecs((Rectangle) { enemiesBullets[i].x, enemiesBullets[i].y, ENEMY_ATK_WIDTH, ENEMY_ATK_HEIGHT }, (Rectangle) { player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT })) {
                 PlaySound(*fx);
                 playerHP -= 1;
                 enemiesBullets[i] = (Vector2) { -1, -1 };
@@ -334,14 +350,20 @@ void updateEnemiesBullets(Sound* fx, float delta) {
     }
 }
 
-void drawGame(Texture2D* playerTexture, Texture2D* enemyTexture) {
+void drawGame(Texture2D* playerTexture, Texture2D* enemy1Texture, Texture2D* enemy2Texture, Texture2D* enemy3Texture, Texture2D* enemyAtk) {
     if (playerHP > 0 && enemyCount > 0) {
         DrawTextureV(*playerTexture, player, WHITE);
 
         for (int i = 0; i < 5; ++i) {
             for (int j = 0; j < 8; ++j) {
                 if (enemies[i][j].x != -1) {
-                    DrawTextureV(*enemyTexture, enemies[i][j], WHITE);
+                    if (i == 0) {
+                        DrawTextureV(*enemy3Texture, enemies[i][j], WHITE);
+                    } else if (i <= 2) {
+                        DrawTextureV(*enemy2Texture, enemies[i][j], WHITE);
+                    } else {
+                        DrawTextureV(*enemy1Texture, enemies[i][j], WHITE);
+                    }
                 }
             }
         }
@@ -354,7 +376,7 @@ void drawGame(Texture2D* playerTexture, Texture2D* enemyTexture) {
 
         for (int i = 0; i < 50; ++i) {
             if (enemiesBullets[i].x != -1) {
-                DrawRectangle(enemiesBullets[i].x, enemiesBullets[i].y, 6, 6, WHITE);
+                DrawTextureV(*enemyAtk, enemiesBullets[i], WHITE);
             }
         }
         DrawText(TextFormat("SCORE: %05i", score), 10, SCREEN_HEIGHT - 25, 20, RAYWHITE);
@@ -387,15 +409,18 @@ void drawMainMenu() {
     }
 }
 
-void handleMainMenu() {
+void handleMainMenu(Sound* uiFx) {
     if (!isInScores) {
         if (IsKeyPressed(KEY_DOWN)) {
+            if (menuTextSelected != 1) PlaySound(*uiFx);
             menuTextSelected = 1;
         } else if (IsKeyPressed(KEY_UP)) {
+            if (menuTextSelected != 0) PlaySound(*uiFx);;
             menuTextSelected = 0;
         }
 
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+            PlaySound(*uiFx);
             if (menuTextSelected == 0) {
                 isInGame = 1;
             } else {
@@ -404,6 +429,7 @@ void handleMainMenu() {
         }
     } else {
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+            PlaySound(*uiFx);
             isInScores = 0;
         }
     }
